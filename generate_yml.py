@@ -88,7 +88,7 @@ def parse_pricelist(df):
                     'id': product_id_str, 'name': product_name, 'price': price,
                     'currencyId': currency_id, 'categoryId': current_category_id,
                     'url': f"{SHOP_URL}/product/{product_id_str}",
-                    'picture': "https://i.ibb.co/L5QyLST/logo-1c.png"
+                    'picture': "https://i.ibb.co/L5QyLST/logo-1c.svg"
                 })
 
     print(f"Обработка завершена. Найдено категорий: {len(categories)}, товаров: {len(offers)}.")
