@@ -1,7 +1,8 @@
-// index.js (исправленная и более надежная версия)
+// Полный index.js
 const express = require('express');
 const cors = require('cors');
-const fs =require('fs');
+const fs = require('fs');
+const path = require('path'); // Добавлен модуль
 const xml2js = require('xml2js');
 const crypto = require('crypto');
 const cron = require('node-cron');
@@ -10,8 +11,11 @@ const { spawn } = require('child_process');
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors()); // Это разрешает запросы с вашего сайта
+app.use(cors());
 app.use(express.json());
+
+// Раздача статических файлов из папки 'public'
+app.use(express.static(path.join(__dirname, 'public')));
 
 const TINKOFF_CONFIG = {
     terminalKey: process.env.TINKOFF_TERMINAL_KEY,
@@ -31,35 +35,23 @@ function runYmlGenerator() {
     });
 }
 
-// Запускаем генератор через 5 секунд после старта и раз в месяц
 setTimeout(runYmlGenerator, 5000);
 cron.schedule('0 3 1 * *', runYmlGenerator, { scheduled: true, timezone: "Europe/Moscow" });
-
 
 app.get('/api/catalog', async (req, res) => {
     console.log("Получен запрос на /api/catalog. Читаем готовый YML файл...");
     try {
         if (!fs.existsSync('price_feed.yml')) {
-            console.warn("Файл price_feed.yml не найден.");
             return res.status(404).json({ error: "Каталог временно недоступен, идет обновление." });
         }
-        
         const ymlData = fs.readFileSync('price_feed.yml', 'utf8');
         const parser = new xml2js.Parser({ explicitArray: false, emptyTag: null });
         const result = await parser.parseStringPromise(ymlData);
-
-        if (!result?.yml_catalog?.shop) {
-             throw new Error("Неверная структура YML файла после парсинга.");
-        }
-
+        if (!result?.yml_catalog?.shop) { throw new Error("Неверная структура YML файла после парсинга."); }
         const shop = result.yml_catalog.shop;
-        // Убедимся, что поля всегда являются массивами, даже если в YML один элемент
         const categories = shop.categories?.category ? [].concat(shop.categories.category) : [];
         const offers = shop.offers?.offer ? [].concat(shop.offers.offer) : [];
-
         res.json({ categories, offers });
-        console.log("Успешно отправили данные каталога клиенту.");
-
     } catch (error) {
         console.error("Критическая ошибка при чтении или парсинге YML:", error);
         res.status(500).json({ error: "Не удалось загрузить каталог из-за внутренней ошибки сервера." });
@@ -67,7 +59,6 @@ app.get('/api/catalog', async (req, res) => {
 });
 
 app.post('/api/pay', async (req, res) => {
-    // Код для оплаты остается без изменений
     const { id, name, price, currency } = req.body;
     if (!TINKOFF_CONFIG.terminalKey || !TINKOFF_CONFIG.password) { return res.status(500).json({ error: "Tinkoff credentials are not configured on the server." }); }
     const requestData = { TerminalKey: TINKOFF_CONFIG.terminalKey, Amount: Math.round(price * 100), OrderId: `${id}-${Date.now()}`, Description: name, SuccessURL: TINKOFF_CONFIG.successUrl, FailURL: TINKOFF_CONFIG.failUrl, Receipt: { Email: "customer@test.ru", Taxation: "usn_income", Items: [{ Name: name, Price: Math.round(price * 100), Quantity: 1.00, Amount: Math.round(price * 100), Tax: "none" }] } };
