@@ -14,7 +14,7 @@ PRICE_URL = "https://1c.ru/ftp/pub/pricelst/price_1c.zip"
 SHOP_NAME = "Краммерти.рф"
 COMPANY_NAME = "ООО \"Краммерти\""
 SHOP_URL = "https://краммерти.рф"
-OUTPUT_YML_FILE = "price_feed.yml"
+OUTPUT_YML_FILE = "public/price_feed.yml"
 
 # --- ССЫЛКА НА ИЗОБРАЖЕНИЕ, КОТОРАЯ БУДЕТ В YML ---
 # ВАЖНО: Укажите здесь URL вашего бэкенд-сервиса на Render!
