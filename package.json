@@ -1,7 +1,7 @@
 {
   "name": "tinkoff-payment-backend",
-  "version": "1.1.0",
-  "description": "Secure payment backend for Tinkoff with automated YML generation",
+  "version": "1.2.0",
+  "description": "Secure payment backend with order processing and notifications",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -11,6 +11,7 @@
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "node-cron": "^3.0.3",
-    "xml2js": "^0.6.2"
+    "xml2js": "^0.6.2",
+    "nodemailer": "^6.9.7"
   }
 }
