@@ -1,3 +1,4 @@
+// package.json
 {
   "name": "tinkoff-payment-backend",
   "version": "1.2.0",
@@ -6,6 +7,9 @@
   "scripts": {
     "start": "node index.js",
     "build": "pip install -r requirements.txt"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "cors": "^2.8.5",
