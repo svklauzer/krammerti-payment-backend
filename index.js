@@ -44,13 +44,11 @@ const SHOP_INFO = {
 async function sendNotificationEmail({ to, subject, html }) {
     if (!SMTP_CONFIG.auth.user || !SMTP_CONFIG.auth.pass || !ADMIN_EMAIL) {
         console.error("SMTP или ADMIN_EMAIL не настроены в переменных окружения. Пропускаем отправку письма.");
-        return; // Просто выходим, не роняя сервер
+        return;
     }
 
     try {
         const transporter = nodemailer.createTransport(SMTP_CONFIG);
-        
-        // Проверяем соединение с SMTP сервером перед отправкой
         await transporter.verify(); 
         
         const mailOptions = {
@@ -63,29 +61,43 @@ async function sendNotificationEmail({ to, subject, html }) {
         await transporter.sendMail(mailOptions);
         console.log(`Письмо успешно отправлено на ${to}`);
     } catch (error) {
-        // Ловим любую ошибку, связанную с почтой, логируем ее, но не даем серверу упасть
         console.error(`Критическая ошибка при отправке письма на ${to}:`, error);
     }
 }
 
-// --- ФУНКЦИЯ-ГЕНЕРАТОР YML ---
+// --- ИЗМЕНЕННАЯ ФУНКЦИЯ-ГЕНЕРАТОР YML ---
+// Теперь она возвращает Promise для ожидания ее завершения
 function runYmlGenerator() {
-    console.log('Запуск фонового генератора YML-фида...');
-    const pythonProcess = spawn('python3', ['generate_yml.py']);
-    pythonProcess.stdout.on('data', (data) => console.log(`[Python Script]: ${data.toString()}`));
-    pythonProcess.stderr.on('data', (data) => console.error(`[Python Script Error]: ${data.toString()}`));
-    pythonProcess.on('close', (code) => {
-        console.log(`Процесс фоновой генерации завершился с кодом: ${code}`);
+    return new Promise((resolve, reject) => {
+        console.log('Запуск генератора YML-фида...');
+        const pythonProcess = spawn('python3', ['generate_yml.py']);
+        let errorOutput = '';
+
+        pythonProcess.stdout.on('data', (data) => console.log(`[Python Script]: ${data.toString()}`));
+        pythonProcess.stderr.on('data', (data) => {
+            console.error(`[Python Script Error]: ${data.toString()}`);
+            errorOutput += data.toString();
+        });
+
+        pythonProcess.on('close', (code) => {
+            if (code === 0) {
+                console.log('Генерация YML-фида успешно завершена.');
+                resolve();
+            } else {
+                console.error(`Процесс генерации завершился с кодом ошибки: ${code}`);
+                reject(new Error(`Python script failed with code ${code}: ${errorOutput}`));
+            }
+        });
+
+        pythonProcess.on('error', (err) => {
+             console.error('Не удалось запустить Python-скрипт.', err);
+             reject(err);
+        });
     });
 }
 
-// --- АВТОМАТИЗАЦИЯ ---
-// Запускаем генератор через 5 секунд после старта и раз в месяц
-setTimeout(runYmlGenerator, 5000);
-cron.schedule('0 3 1 * *', runYmlGenerator, { scheduled: true, timezone: "Europe/Moscow" });
 
-
-// --- API ЭНДПОИНТЫ ---
+// --- API ЭНДПОИНТЫ (определяем их до запуска сервера) ---
 
 // Эндпоинт для получения каталога
 app.get('/api/catalog', async (req, res) => {
@@ -105,7 +117,6 @@ app.get('/api/catalog', async (req, res) => {
         }
 
         const shop = result.yml_catalog.shop;
-        // Убедимся, что поля всегда являются массивами, даже если в YML один элемент
         const categories = shop.categories?.category ? [].concat(shop.categories.category) : [];
         const offers = shop.offers?.offer ? [].concat(shop.offers.offer) : [];
 
@@ -188,6 +199,36 @@ app.post('/api/pay', async (req, res) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`Сервер запущен на порту ${port}`);
-});
+
+// --- НОВАЯ ЛОГИКА ЗАПУСКА СЕРВЕРА ---
+async function startServer() {
+    try {
+        console.log("Шаг 1: Первоначальная генерация каталога перед запуском сервера...");
+        await runYmlGenerator();
+        console.log("Шаг 2: Первоначальный YML-файл готов.");
+
+        app.listen(port, () => {
+            console.log(`Шаг 3: Сервер успешно запущен на порту ${port} и готов принимать запросы.`);
+        });
+
+        // Устанавливаем фоновое обновление на будущее
+        cron.schedule('0 3 1 * *', () => {
+            console.log('Плановый запуск генератора YML по расписанию (раз в месяц).');
+            // Запускаем, но не ждем завершения, чтобы не блокировать сервер
+            runYmlGenerator().catch(err => {
+                console.error("Ошибка при плановом обновлении каталога:", err);
+            });
+        }, {
+            scheduled: true,
+            timezone: "Europe/Moscow"
+        });
+
+    } catch (error) {
+        console.error("КРИТИЧЕСКАЯ ОШИБКА: Не удалось сгенерировать первоначальный каталог. Сервер не будет запущен.", error);
+        // Завершаем процесс с кодом ошибки, чтобы Render показал сбой
+        process.exit(1); 
+    }
+}
+
+// Запускаем всю логику
+startServer();
