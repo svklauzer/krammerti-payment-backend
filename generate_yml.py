@@ -16,7 +16,8 @@ COMPANY_NAME = "ООО \"Краммерти\""
 SHOP_URL = "https://краммерти.рф"
 OUTPUT_YML_FILE = "price_feed.yml"
 OUTPUT_HTML_DIR = "products"
-PRODUCT_IMAGE_URL = "https://i.ibb.co/L5QyLST/logo-1c.png" # Используем публичную ссылку для надежности
+BACKEND_URL = "https://krammerti-payment-backend.onrender.com"
+PRODUCT_IMAGE_URL = f"{BACKEND_URL}/logo-1c.svg"
 
 CURRENCY_MAP = {
     'РУБ.': 'RUR', 'USD': 'USD', 'У.Е.': 'USD', 'KZT': 'KZT',
