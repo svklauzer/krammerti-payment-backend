@@ -84,30 +84,21 @@ function runYmlGenerator() {
 
 // --- API ЭНДПОИНТЫ ---
 
-// ЭНДПОИНТ ДЛЯ СКАЧИВАНИЯ YML-ФАЙЛА (С ИСПРАВЛЕНИЕМ)
+// ЭНДПОИНТ ДЛЯ ЯНДЕКС.МАРКЕТА И СКАЧИВАНИЯ YML (ИСПРАВЛЕН)
 app.get('/api/download-yml', (req, res) => {
-    if (req.query.key !== DOWNLOAD_SECRET_KEY) {
-        return res.status(403).send('Forbidden: Invalid Key');
-    }
+    // Убираем проверку по ключу, чтобы робот Яндекса мог получить доступ.
+    // Если хотите оставить его приватным, используйте очень длинное, не угадываемое имя эндпоинта.
     const ymlFilePath = path.join(__dirname, 'price_feed.yml');
     if (!fs.existsSync(ymlFilePath)) {
-        return res.status(404).send('File not found. Please wait for generation to complete.');
+        return res.status(404).send('File not found. Generation might be in progress.');
     }
 
     // --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
-    // Устанавливаем правильный Content-Type, который ожидает Яндекс
-    res.setHeader('Content-Type', 'application/xml');
-
-    // Отправляем файл для скачивания
-    res.download(ymlFilePath, 'price_feed.yml', (err) => {
-        if (err) {
-            console.error("Ошибка при отправке YML файла:", err);
-            // Если заголовки уже были отправлены, мы не можем отправить новый ответ
-            if (!res.headersSent) {
-                res.status(500).send("Could not download the file.");
-            }
-        }
-    });
+    // Устанавливаем правильный Content-Type
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    
+    // Просто отправляем содержимое файла, без принудительного скачивания
+    fs.createReadStream(ymlFilePath).pipe(res);
 });
 
 // Эндпоинт для получения каталога (без изменений)
