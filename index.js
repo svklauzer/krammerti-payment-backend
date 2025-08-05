@@ -84,24 +84,28 @@ function runYmlGenerator() {
 
 // --- API ЭНДПОИНТЫ ---
 
-// --- НОВЫЙ ЭНДПОИНТ ДЛЯ СКАЧИВАНИЯ YML-ФАЙЛА ---
+// ЭНДПОИНТ ДЛЯ СКАЧИВАНИЯ YML-ФАЙЛА (С ИСПРАВЛЕНИЕМ)
 app.get('/api/download-yml', (req, res) => {
-    // Используем тот же самый секретный ключ для безопасности
     if (req.query.key !== DOWNLOAD_SECRET_KEY) {
         return res.status(403).send('Forbidden: Invalid Key');
     }
-
     const ymlFilePath = path.join(__dirname, 'price_feed.yml');
-
     if (!fs.existsSync(ymlFilePath)) {
         return res.status(404).send('File not found. Please wait for generation to complete.');
     }
+
+    // --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
+    // Устанавливаем правильный Content-Type, который ожидает Яндекс
+    res.setHeader('Content-Type', 'application/xml');
 
     // Отправляем файл для скачивания
     res.download(ymlFilePath, 'price_feed.yml', (err) => {
         if (err) {
             console.error("Ошибка при отправке YML файла:", err);
-            res.status(500).send("Could not download the file.");
+            // Если заголовки уже были отправлены, мы не можем отправить новый ответ
+            if (!res.headersSent) {
+                res.status(500).send("Could not download the file.");
+            }
         }
     });
 });
