@@ -84,6 +84,28 @@ function runYmlGenerator() {
 
 // --- API ЭНДПОИНТЫ ---
 
+// --- НОВЫЙ ЭНДПОИНТ ДЛЯ СКАЧИВАНИЯ YML-ФАЙЛА ---
+app.get('/api/download-yml', (req, res) => {
+    // Используем тот же самый секретный ключ для безопасности
+    if (req.query.key !== DOWNLOAD_SECRET_KEY) {
+        return res.status(403).send('Forbidden: Invalid Key');
+    }
+
+    const ymlFilePath = path.join(__dirname, 'price_feed.yml');
+
+    if (!fs.existsSync(ymlFilePath)) {
+        return res.status(404).send('File not found. Please wait for generation to complete.');
+    }
+
+    // Отправляем файл для скачивания
+    res.download(ymlFilePath, 'price_feed.yml', (err) => {
+        if (err) {
+            console.error("Ошибка при отправке YML файла:", err);
+            res.status(500).send("Could not download the file.");
+        }
+    });
+});
+
 // Эндпоинт для получения каталога (без изменений)
 app.get('/api/catalog', async (req, res) => {
     console.log("Получен запрос на /api/catalog. Читаем готовый YML файл...");
