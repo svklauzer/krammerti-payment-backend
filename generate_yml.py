@@ -1,4 +1,4 @@
-# Полный generate_yml.py
+# generate_yml.py (финальная версия с правильными ссылками)
 import requests
 import pandas as pd
 import zipfile
@@ -10,14 +10,18 @@ from datetime import datetime
 import re
 import shutil
 
+# --- КОНФИГУРАЦИЯ ---
 PRICE_URL = "https://1c.ru/ftp/pub/pricelst/price_1c.zip"
 SHOP_NAME = "Краммерти.рф"
 COMPANY_NAME = "ООО \"Краммерти\""
 SHOP_URL = "https://краммерти.рф"
+WIDGET_PAGE_SLUG = "1c_supermarket" # Путь к странице с вашим виджетом
 OUTPUT_YML_FILE = "price_feed.yml"
 OUTPUT_HTML_DIR = "products"
+
+# --- ССЫЛКА НА ИЗОБРАЖЕНИЕ, КОТОРАЯ БУДЕТ В YML ---
 BACKEND_URL = "https://krammerti-payment-backend.onrender.com"
-PRODUCT_IMAGE_URL = f"{BACKEND_URL}/logo-1c.svg"
+PRODUCT_IMAGE_URL = f"{BACKEND_URL}/logo-1c.svg" # Правильная ссылка на ваш бэкенд
 
 CURRENCY_MAP = {
     'РУБ.': 'RUR', 'USD': 'USD', 'У.Е.': 'USD', 'KZT': 'KZT',
@@ -40,7 +44,7 @@ HTML_TEMPLATE = """
         h1 {{ font-size: 28px; margin: 0; }}
         .product-code {{ font-size: 14px; color: #5e6c84; margin-top: 5px; }}
         .product-body {{ display: flex; flex-wrap: wrap; gap: 30px; }}
-        .product-image {{ width: 150px; height: auto; flex-shrink: 0; }}
+        .product-image {{ width: 150px; height: auto; flex-shrink: 0; object-fit: contain; }}
         .product-info {{ flex-grow: 1; min-width: 300px; }}
         .product-info p {{ line-height: 1.6; }}
         .product-buy-zone {{ margin-top: 30px; padding: 20px; background-color: #fafbfc; border-radius: 6px; text-align: center; }}
@@ -58,7 +62,7 @@ HTML_TEMPLATE = """
             <div class="product-code">Код товара: {id}</div>
         </header>
         <main class="product-body">
-            <img src="{picture}" alt="{name}" class="product-image">
+            <img src="{picture}" alt="Логотип 1С" class="product-image">
             <div class="product-info">
                 <h2>Описание</h2>
                 <p>{description_full}</p>
@@ -80,16 +84,18 @@ def generate_product_pages(offers):
     print(f"Папка '{OUTPUT_HTML_DIR}' создана/очищена.")
     count = 0
     for offer in offers:
-        buy_link = f"{SHOP_URL}/1c_supermarket"
+        # --- ИСПРАВЛЕНИЕ: Формируем ссылку с URL-параметром ---
+        buy_link = f"{SHOP_URL}/{WIDGET_PAGE_SLUG}?addToCart={offer['id']}"
+        
         page_content = HTML_TEMPLATE.format(
             title=f"Купить {offer['name']} - {SHOP_NAME}",
-            description=f"Купить {offer['name']} по выгодной цене. Код товара: {offer['id']}. Официальная поставка от ООО \"{COMPANY_NAME}\".",
+            description=f"Купить {offer['name']} по выгодной цене. Код товара: {offer['id']}.",
             name=offer['name'],
             id=offer['id'],
             picture=offer['picture'],
             price=int(round(offer['price'])),
             currency=offer['currencyId'],
-            description_full=offer['name'], # Используем название как полное описание
+            description_full=offer['name'],
             buy_link=buy_link
         )
         file_path = os.path.join(OUTPUT_HTML_DIR, f"{offer['id']}.html")
