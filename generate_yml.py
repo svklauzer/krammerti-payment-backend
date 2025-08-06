@@ -140,22 +140,27 @@ def generate_product_pages(offers):
     print(f"Папка '{OUTPUT_HTML_DIR}' создана/очищена.")
     count = 0
     for offer in offers:
-        # --- ИСПРАВЛЕНИЕ: Формируем ссылку с URL-параметром ---
         buy_link = f"{SHOP_URL}/{WIDGET_PAGE_SLUG}?addToCart={offer['id']}"
         
-        page_content = HTML_TEMPLATE.format(
-            title=f"Купить {offer['name']} - {SHOP_NAME}",
-            name_json=offer['name'].replace('"', '\\"'), # Экранируем кавычки для JSON
-            description=f"Купить {offer['name']} по выгодной цене. Код товара: {offer['id']}.",
-            url=offer['url'],
-            name=offer['name'],
-            id=offer['id'],
-            picture=offer['picture'],
-            price=int(round(offer['price'])),
-            currency=offer['currencyId'],
-            description_full=offer['name'],
-            buy_link=buy_link
-        )
+        # Готовим данные для вставки, включая недостающий 'description_json'
+        page_data = {
+            "title": f"Купить {offer['name']} - {SHOP_NAME}",
+            "description": f"Купить {offer['name']} по выгодной цене. Код товара: {offer['id']}.",
+            "name": offer['name'],
+            "id": offer['id'],
+            "picture": offer['picture'],
+            "price": int(round(offer['price'])),
+            "currency": offer['currencyId'],
+            "url": offer['url'],
+            "description_full": offer['name'], # Используем название как полное описание
+            "buy_link": buy_link,
+            # Добавляем экранированные версии для JSON-LD
+            "name_json": offer['name'].replace('"', '\\"'),
+            "description_json": f"Купить {offer['name'].replace('"', '\\"')} по выгодной цене."
+        }
+        
+        page_content = HTML_TEMPLATE.format(**page_data)
+        
         file_path = os.path.join(OUTPUT_HTML_DIR, f"{offer['id']}.html")
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(page_content)
