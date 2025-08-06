@@ -12,6 +12,9 @@ const archiver = require('archiver'); // <-- Добавили зависимос
 const app = express();
 const port = process.env.PORT || 3000;
 
+// --- НОВЫЙ БЛОК: КЭШ ---
+let catalogCache = null; // Здесь будем хранить готовый JSON
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -62,10 +65,11 @@ async function sendNotificationEmail({ to, subject, html }) {
     }
 }
 
-// --- ФУНКЦИЯ-ГЕНЕРАТОР YML (без изменений) ---
-function runYmlGenerator() {
+// --- ИЗМЕНЕННАЯ ФУНКЦИЯ ---
+// Теперь она не просто запускает скрипт, а еще и обновляет кэш
+function runYmlGeneratorAndUpdateCache() {
     return new Promise((resolve, reject) => {
-        console.log('Запуск генератора YML-фида...');
+        console.log('Запуск генератора YML-фида и обновление кэша...');
         const pythonProcess = spawn('python3', ['generate_yml.py']);
         let errorOutput = '';
         pythonProcess.stdout.on('data', (data) => console.log(`[Python Script]: ${data.toString()}`));
@@ -73,11 +77,30 @@ function runYmlGenerator() {
             console.error(`[Python Script Error]: ${data.toString()}`);
             errorOutput += data.toString();
         });
-        pythonProcess.on('close', (code) => {
-            if (code === 0) { console.log('Генерация YML-фида успешно завершена.'); resolve(); } 
-            else { reject(new Error(`Python script failed with code ${code}: ${errorOutput}`)); }
+        pythonProcess.on('close', async (code) => {
+            if (code === 0) {
+                console.log('Генерация YML завершена. Обновляем кэш...');
+                try {
+                    const ymlData = fs.readFileSync('price_feed.yml', 'utf8');
+                    const parser = new xml2js.Parser({ explicitArray: false, emptyTag: null });
+                    const result = await parser.parseStringPromise(ymlData);
+                    if (!result?.yml_catalog?.shop) { throw new Error("Неверная структура YML."); }
+                    const shop = result.yml_catalog.shop;
+                    // Обновляем глобальную переменную с кэшем
+                    catalogCache = {
+                        categories: shop.categories?.category ? [].concat(shop.categories.category) : [],
+                        offers: shop.offers?.offer ? [].concat(shop.offers.offer) : []
+                    };
+                    console.log('Кэш каталога успешно обновлен.');
+                    resolve();
+                } catch (error) {
+                    console.error("Ошибка при обновлении кэша:", error);
+                    reject(error);
+                }
+            } else {
+                reject(new Error(`Python script failed with code ${code}`));
+            }
         });
-        pythonProcess.on('error', (err) => { console.error('Не удалось запустить Python-скрипт.', err); reject(err); });
     });
 }
 
@@ -101,25 +124,13 @@ app.get('/api/download-yml', (req, res) => {
     fs.createReadStream(ymlFilePath).pipe(res);
 });
 
-// Эндпоинт для получения каталога (без изменений)
+// --- ИЗМЕНЕННЫЙ ЭНДПОИНТ ---
+// Теперь он не читает файл, а просто отдает данные из кэша
 app.get('/api/catalog', async (req, res) => {
-    console.log("Получен запрос на /api/catalog. Читаем готовый YML файл...");
-    try {
-        if (!fs.existsSync('price_feed.yml')) {
-            console.warn("Файл price_feed.yml не найден.");
-            return res.status(404).json({ error: "Каталог временно недоступен, идет обновление." });
-        }
-        const ymlData = fs.readFileSync('price_feed.yml', 'utf8');
-        const parser = new xml2js.Parser({ explicitArray: false, emptyTag: null });
-        const result = await parser.parseStringPromise(ymlData);
-        if (!result?.yml_catalog?.shop) { throw new Error("Неверная структура YML файла после парсинга."); }
-        const shop = result.yml_catalog.shop;
-        const categories = shop.categories?.category ? [].concat(shop.categories.category) : [];
-        const offers = shop.offers?.offer ? [].concat(shop.offers.offer) : [];
-        res.json({ categories, offers });
-    } catch (error) {
-        console.error("Критическая ошибка при чтении или парсинге YML:", error);
-        res.status(500).json({ error: "Не удалось загрузить каталог из-за внутренней ошибки сервера." });
+    if (catalogCache) {
+        res.json(catalogCache);
+    } else {
+        res.status(503).json({ error: "Каталог в данный момент инициализируется. Пожалуйста, попробуйте через минуту." });
     }
 });
 
@@ -182,32 +193,20 @@ app.get('/api/download-products', (req, res) => {
 });
 
 
-// --- ЛОГИКА ЗАПУСКА СЕРВЕРА (без изменений) ---
+// --- ИЗМЕНЕННЫЙ ЗАПУСК СЕРВЕРА ---
 async function startServer() {
     try {
-        console.log("Шаг 1: Первоначальная генерация каталога перед запуском сервера...");
-        await runYmlGenerator();
-        console.log("Шаг 2: Первоначальный YML-файл готов.");
-
+        await runYmlGeneratorAndUpdateCache(); // Запускаем и ждем, пока кэш будет готов
         app.listen(port, () => {
-            console.log(`Шаг 3: Сервер успешно запущен на порту ${port} и готов принимать запросы.`);
+            console.log(`Сервер запущен на порту ${port} с готовым кэшем каталога.`);
         });
-
-        cron.schedule('0 3 1 * *', () => {
-            console.log('Плановый запуск генератора YML по расписанию (раз в месяц).');
-            runYmlGenerator().catch(err => {
-                console.error("Ошибка при плановом обновлении каталога:", err);
-            });
-        }, {
-            scheduled: true,
-            timezone: "Europe/Moscow"
+        cron.schedule('0 3 1 * *', () => { // Плановое обновление кэша
+            runYmlGeneratorAndUpdateCache().catch(err => console.error("Ошибка при плановом обновлении кэша:", err));
         });
-
     } catch (error) {
-        console.error("КРИТИЧЕСКАЯ ОШИБКА: Не удалось сгенерировать первоначальный каталог. Сервер не будет запущен.", error);
+        console.error("КРИТИЧЕСКАЯ ОШИБКА при запуске:", error);
         process.exit(1);
     }
 }
 
-// Запускаем всю логику
 startServer();
