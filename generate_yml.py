@@ -55,6 +55,25 @@ HTML_TEMPLATE = """
             font-size: 18px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block;
         }}
     </style>
+
+    <!-- НОВЫЙ БЛОК: Микроразметка Schema.org -->
+    <script type="application/ld+json">
+    {{
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      "name": "{name_json}",
+      "image": "{picture}",
+      "description": "{description_json}",
+      "sku": "{id}",
+      "offers": {{
+        "@type": "Offer",
+        "url": "{url}",
+        "priceCurrency": "{currency}",
+        "price": "{price}",
+        "availability": "https://schema.org/InStock"
+      }}
+    }}
+    </script>
 </head>
 <body>
     <div class="container">
@@ -89,9 +108,30 @@ HTML_TEMPLATE = """
     <noscript><div><img src="https://mc.yandex.ru/watch/103609697" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
     <!-- /Yandex.Metrika counter -->
 
+
+
 </body>
 </html>
 """
+
+# 2. Добавить новую функцию для генерации sitemap.xml
+def generate_sitemap(offers, base_url, output_dir):
+    print("Генерация sitemap.xml...")
+    root = ET.Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
+    
+    # Добавляем главную страницу каталога
+    url_element = ET.SubElement(root, "url")
+    ET.SubElement(url_element, "loc").text = f"{base_url}/{WIDGET_PAGE_SLUG}"
+    
+    # Добавляем все страницы товаров
+    for offer in offers:
+        url_element = ET.SubElement(root, "url")
+        ET.SubElement(url_element, "loc").text = offer['url']
+
+    tree = ET.ElementTree(root)
+    file_path = os.path.join(output_dir, "sitemap.xml") # Кладем sitemap в папку products
+    tree.write(file_path, encoding='utf-8', xml_declaration=True)
+    print(f"Файл sitemap.xml успешно сгенерирован в папке '{output_dir}'.")
 
 def generate_product_pages(offers):
     if os.path.exists(OUTPUT_HTML_DIR):
@@ -105,7 +145,9 @@ def generate_product_pages(offers):
         
         page_content = HTML_TEMPLATE.format(
             title=f"Купить {offer['name']} - {SHOP_NAME}",
+            name_json=offer['name'].replace('"', '\\"'), # Экранируем кавычки для JSON
             description=f"Купить {offer['name']} по выгодной цене. Код товара: {offer['id']}.",
+            url=offer['url'],
             name=offer['name'],
             id=offer['id'],
             picture=offer['picture'],
@@ -194,5 +236,6 @@ if __name__ == "__main__":
         if categories_data and offers_data:
             generate_yml_feed(categories_data, offers_data, currencies_data)
             generate_product_pages(offers_data)
+            generate_sitemap(offers_data, SHOP_URL, OUTPUT_HTML_DIR) # <--- ВЫЗОВ
         else:
             print("Не удалось извлечь данные для создания фида и страниц.")
