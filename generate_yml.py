@@ -29,6 +29,7 @@ CURRENCY_MAP = {
     'TJS': 'TJS', 'GEL': 'GEL',
 }
 
+# --- ОБНОВЛЕННЫЙ ШАБЛОН HTML-СТРАНИЦЫ С ЯНДЕКС.МЕТРИКОЙ ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ru">
@@ -62,7 +63,7 @@ HTML_TEMPLATE = """
             <div class="product-code">Код товара: {id}</div>
         </header>
         <main class="product-body">
-            <img src="{picture}" alt="Логотип 1С" class="product-image">
+            <img src="{picture}" alt="{name}" class="product-image">
             <div class="product-info">
                 <h2>Описание</h2>
                 <p>{description_full}</p>
@@ -73,6 +74,21 @@ HTML_TEMPLATE = """
             <a href="{buy_link}" class="buy-button">Добавить в корзину и перейти в каталог</a>
         </div>
     </div>
+
+    <!-- Yandex.Metrika counter -->
+    <script type="text/javascript">
+        (function(m,e,t,r,i,k,a){{
+            m[i]=m[i]||function(){{(m[i].a=m[i].a||[]).push(arguments)}};
+            m[i].l=1*new Date();
+            for (var j = 0; j < document.scripts.length; j++) {{if (document.scripts[j].src === r) {{ return; }}}}
+            k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+        }})(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=103609697', 'ym');
+
+        ym(103609697, 'init', {{ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", accurateTrackBounce:true, trackLinks:true}});
+    </script>
+    <noscript><div><img src="https://mc.yandex.ru/watch/103609697" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+    <!-- /Yandex.Metrika counter -->
+
 </body>
 </html>
 """
