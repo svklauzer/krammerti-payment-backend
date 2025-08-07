@@ -1,4 +1,4 @@
-# generate_yml.py (финальная версия с правильными ссылками)
+# generate_yml.py (финальная версия с Indexing API)
 import requests
 import pandas as pd
 import zipfile
@@ -9,6 +9,7 @@ from xml.dom import minidom
 from datetime import datetime
 import re
 import shutil
+import json # Добавляем модуль для работы с JSON
 
 # --- КОНФИГУРАЦИЯ ---
 PRICE_URL = "https://1c.ru/ftp/pub/pricelst/price_1c.zip"
@@ -22,6 +23,10 @@ OUTPUT_HTML_DIR = "products"
 # --- ССЫЛКА НА ИЗОБРАЖЕНИЕ, КОТОРАЯ БУДЕТ В YML ---
 BACKEND_URL = "https://krammerti-payment-backend.onrender.com"
 PRODUCT_IMAGE_URL = f"{BACKEND_URL}/logo-1c.svg" # Правильная ссылка на ваш бэкенд
+
+# --- НОВЫЕ ПАРАМЕТРЫ ДЛЯ INDEXING API ---
+YANDEX_API_KEY = os.environ.get('YANDEX_API_KEY') # Берем ключ из окружения
+YANDEX_HOST = "https://api.webmaster.yandex.net"
 
 CURRENCY_MAP = {
     'РУБ.': 'RUR', 'USD': 'USD', 'У.Е.': 'USD', 'KZT': 'KZT',
@@ -113,6 +118,30 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
+
+# --- НОВАЯ ФУНКЦИЯ ДЛЯ ОТПРАВКИ URL В ЯНДЕКС ---
+def ping_yandex_for_indexing(url_list):
+    if not YANDEX_API_KEY:
+        print("Ключ YANDEX_API_KEY не найден в переменных окружения. Пропускаем отправку в Indexing API.")
+        return
+
+    print(f"Отправка {len(url_list)} URL в Яндекс Indexing API...")
+    headers = {'Authorization': f'OAuth {YANDEX_API_KEY}', 'Content-Type': 'application/json'}
+    api_url = f"{YANDEX_HOST}/v4/user/hosts/{SHOP_URL.replace('https://', '')}/search-urls/batch"
+
+    # Яндекс принимает не более 100 URL за раз, поэтому разбиваем на части
+    for i in range(0, len(url_list), 100):
+        chunk = url_list[i:i+100]
+        payload = {"url_list": chunk}
+        try:
+            response = requests.post(api_url, headers=headers, data=json.dumps(payload), timeout=30)
+            if response.status_code == 202:
+                print(f"Партия из {len(chunk)} URL успешно отправлена в очередь на индексацию.")
+            else:
+                print(f"Ошибка при отправке URL в Яндекс. Статус: {response.status_code}, Ответ: {response.text}")
+        except Exception as e:
+            print(f"Исключение при обращении к Яндекс API: {e}")
+
 
 # 2. Добавить новую функцию для генерации sitemap.xml
 def generate_sitemap(offers, base_url, output_dir):
@@ -234,13 +263,24 @@ def generate_yml_feed(categories, offers, used_currencies):
     with open(OUTPUT_YML_FILE, 'wb') as f: f.write(dom.toprettyxml(indent="  ", encoding="UTF-8"))
     print(f"YML фид успешно сохранен в файл '{OUTPUT_YML_FILE}'.")
 
+# --- ГЛАВНЫЙ ИСПОЛНЯЕМЫЙ БЛОК (С ИЗМЕНЕНИЯМИ) ---
 if __name__ == "__main__":
     dataframe = download_and_extract_pricelist(PRICE_URL)
     if dataframe is not None:
         categories_data, offers_data, currencies_data = parse_pricelist(dataframe)
         if categories_data and offers_data:
+            # 1. Генерируем YML
             generate_yml_feed(categories_data, offers_data, currencies_data)
+            
+            # 2. Генерируем HTML-страницы
             generate_product_pages(offers_data)
-            generate_sitemap(offers_data, SHOP_URL, OUTPUT_HTML_DIR) # <--- ВЫЗОВ
+            
+            # 3. Генерируем Sitemap
+            generate_sitemap(offers_data, SHOP_URL, OUTPUT_HTML_DIR)
+
+            # 4. НОВЫЙ ШАГ: Отправляем все URL на быструю индексацию в Яндекс
+            all_urls = [offer['url'] for offer in offers_data]
+            all_urls.append(f"{SHOP_URL}/{WIDGET_PAGE_SLUG}") # Добавляем и главную страницу каталога
+            ping_yandex_for_indexing(all_urls)
         else:
             print("Не удалось извлечь данные для создания фида и страниц.")
