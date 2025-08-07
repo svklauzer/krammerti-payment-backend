@@ -25,7 +25,8 @@ BACKEND_URL = "https://krammerti-payment-backend.onrender.com"
 PRODUCT_IMAGE_URL = f"{BACKEND_URL}/logo-1c.svg" # Правильная ссылка на ваш бэкенд
 
 # --- НОВЫЕ ПАРАМЕТРЫ ДЛЯ INDEXING API ---
-YANDEX_API_KEY = os.environ.get('YANDEX_API_KEY') # Берем ключ из окружения
+YANDEX_API_KEY = os.environ.get('YANDEX_API_KEY')
+YANDEX_HOST_ID = os.environ.get('YANDEX_HOST_ID') # <-- Новая переменная
 YANDEX_HOST = "https://api.webmaster.yandex.net"
 
 CURRENCY_MAP = {
@@ -119,17 +120,21 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- НОВАЯ ФУНКЦИЯ ДЛЯ ОТПРАВКИ URL В ЯНДЕКС ---
+# --- ИСПРАВЛЕННАЯ ФУНКЦИЯ ДЛЯ ОТПРАВКИ URL В ЯНДЕКС ---
 def ping_yandex_for_indexing(url_list):
     if not YANDEX_API_KEY:
-        print("Ключ YANDEX_API_KEY не найден в переменных окружения. Пропускаем отправку в Indexing API.")
+        print("Ключ YANDEX_API_KEY не найден. Пропускаем отправку в Indexing API.")
+        return
+    if not YANDEX_HOST_ID:
+        print("YANDEX_HOST_ID не найден. Пропускаем отправку в Indexing API.")
         return
 
-    print(f"Отправка {len(url_list)} URL в Яндекс Indexing API...")
+    print(f"Отправка {len(url_list)} URL в Яндекс Indexing API для хоста {YANDEX_HOST_ID}...")
     headers = {'Authorization': f'OAuth {YANDEX_API_KEY}', 'Content-Type': 'application/json'}
-    api_url = f"{YANDEX_HOST}/v4/user/hosts/{SHOP_URL.replace('https://', '')}/search-urls/batch"
+    # Формируем URL с использованием host_id
+    api_url = f"{YANDEX_HOST}/v4/user/hosts/{YANDEX_HOST_ID}/search-urls/batch"
 
-    # Яндекс принимает не более 100 URL за раз, поэтому разбиваем на части
+    # Разбиваем на части по 100 URL
     for i in range(0, len(url_list), 100):
         chunk = url_list[i:i+100]
         payload = {"url_list": chunk}
