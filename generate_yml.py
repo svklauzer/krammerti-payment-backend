@@ -123,18 +123,19 @@ HTML_TEMPLATE = """
 # --- ИСПРАВЛЕННАЯ ФУНКЦИЯ ДЛЯ ОТПРАВКИ URL В ЯНДЕКС ---
 def ping_yandex_for_indexing(url_list):
     if not YANDEX_API_KEY:
-        print("Ключ YANDEX_API_KEY не найден. Пропускаем отправку в Indexing API.")
+        print("Ключ YANDEX_API_KEY не найден. Пропускаем отправку.")
         return
     if not YANDEX_HOST_ID:
-        print("YANDEX_HOST_ID не найден. Пропускаем отправку в Indexing API.")
+        print("YANDEX_HOST_ID не найден. Пропускаем отправку.")
         return
 
     print(f"Отправка {len(url_list)} URL в Яндекс Indexing API для хоста {YANDEX_HOST_ID}...")
-    headers = {'Authorization': f'OAuth {YANDEX_API_KEY}', 'Content-Type': 'application/json'}
-    # Формируем URL с использованием host_id
+    
+    # --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: МЕНЯЕМ 'OAuth' НА 'Bearer' ---
+    headers = {'Authorization': f'Bearer {YANDEX_API_KEY}', 'Content-Type': 'application/json'}
+    
     api_url = f"{YANDEX_HOST}/v4/user/hosts/{YANDEX_HOST_ID}/search-urls/batch"
 
-    # Разбиваем на части по 100 URL
     for i in range(0, len(url_list), 100):
         chunk = url_list[i:i+100]
         payload = {"url_list": chunk}
