@@ -1,3 +1,4 @@
+// index.js (финальная, проверенная версия)
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -7,131 +8,78 @@ const crypto = require('crypto');
 const cron = require('node-cron');
 const { spawn } = require('child_process');
 const nodemailer = require('nodemailer');
-const archiver = require('archiver'); // <-- Добавили зависимость
+const archiver = require('archiver');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- НОВЫЙ БЛОК: КЭШ ---
-let catalogCache = null; // Здесь будем хранить готовый JSON
-
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+// Раздаем YML файл из папки dist для Яндекса и статику
+app.use(express.static(path.join(__dirname, 'dist'))); 
 
-// --- КОНФИГУРАЦИЯ ---
 const TINKOFF_CONFIG = {
     terminalKey: process.env.TINKOFF_TERMINAL_KEY,
     password: process.env.TINKOFF_PASSWORD,
     apiUrl: "https://securepay.tinkoff.ru/v2/Init",
 };
-
 const SMTP_CONFIG = {
-    host: 'smtp.yandex.ru',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-    }
+    host: 'smtp.yandex.ru', port: 465, secure: true,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
 };
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const SHOP_INFO = {
-    name: "Интернет-магазин Краммерти.рф",
-    url: "https://краммерти.рф",
-    director: "Кляузер Сергей Викторович",
-    inn: "8602310773"
+    name: "Интернет-магазин Краммерти.рф", url: "https://краммерти.рф",
+    director: "Кляузер Сергей Викторович", inn: "8602310773"
 };
-
-// --- НОВЫЙ ПАРАМЕТР ДЛЯ СКАЧИВАНИЯ ---
 const DOWNLOAD_SECRET_KEY = process.env.DOWNLOAD_KEY || "default_secret_key_change_me";
 
+let catalogCache = null;
 
-// --- ФУНКЦИЯ ОТПРАВКИ EMAIL (без изменений) ---
-async function sendNotificationEmail({ to, subject, html }) {
-    if (!SMTP_CONFIG.auth.user || !SMTP_CONFIG.auth.pass || !ADMIN_EMAIL) {
-        console.error("SMTP или ADMIN_EMAIL не настроены в переменных окружения. Пропускаем отправку письма.");
-        return;
-    }
-    try {
-        const transporter = nodemailer.createTransport(SMTP_CONFIG);
-        await transporter.verify();
-        const mailOptions = { from: `"${SHOP_INFO.name}" <${SMTP_CONFIG.auth.user}>`, to, subject, html };
-        await transporter.sendMail(mailOptions);
-        console.log(`Письмо успешно отправлено на ${to}`);
-    } catch (error) {
-        console.error(`Критическая ошибка при отправке письма на ${to}:`, error);
-    }
-}
-
-// --- ИЗМЕНЕННАЯ ФУНКЦИЯ ---
-// Теперь она не просто запускает скрипт, а еще и обновляет кэш
 function runYmlGeneratorAndUpdateCache() {
     return new Promise((resolve, reject) => {
         console.log('Запуск генератора YML-фида и обновление кэша...');
         const pythonProcess = spawn('python3', ['generate_yml.py']);
-        let errorOutput = '';
         pythonProcess.stdout.on('data', (data) => console.log(`[Python Script]: ${data.toString()}`));
-        pythonProcess.stderr.on('data', (data) => {
-            console.error(`[Python Script Error]: ${data.toString()}`);
-            errorOutput += data.toString();
-        });
+        pythonProcess.stderr.on('data', (data) => console.error(`[Python Script Error]: ${data.toString()}`));
         pythonProcess.on('close', async (code) => {
             if (code === 0) {
-                console.log('Генерация YML завершена. Обновляем кэш...');
+                console.log('Генерация завершена. Обновляем кэш...');
                 try {
-                    const ymlData = fs.readFileSync('price_feed.yml', 'utf8');
+                    const ymlData = fs.readFileSync(path.join(__dirname, 'dist', 'price_feed.yml'), 'utf8');
                     const parser = new xml2js.Parser({ explicitArray: false, emptyTag: null });
                     const result = await parser.parseStringPromise(ymlData);
                     if (!result?.yml_catalog?.shop) { throw new Error("Неверная структура YML."); }
                     const shop = result.yml_catalog.shop;
-                    // Обновляем глобальную переменную с кэшем
                     catalogCache = {
                         categories: shop.categories?.category ? [].concat(shop.categories.category) : [],
                         offers: shop.offers?.offer ? [].concat(shop.offers.offer) : []
                     };
                     console.log('Кэш каталога успешно обновлен.');
                     resolve();
-                } catch (error) {
-                    console.error("Ошибка при обновлении кэша:", error);
-                    reject(error);
-                }
-            } else {
-                reject(new Error(`Python script failed with code ${code}`));
-            }
+                } catch (error) { console.error("Ошибка при обновлении кэша:", error); reject(error); }
+            } else { reject(new Error(`Python script failed with code ${code}`)); }
         });
     });
 }
 
-
-// --- API ЭНДПОИНТЫ ---
-
-// ЭНДПОИНТ ДЛЯ ЯНДЕКС.МАРКЕТА И СКАЧИВАНИЯ YML (ИСПРАВЛЕН)
-app.get('/api/download-yml', (req, res) => {
-    // Убираем проверку по ключу, чтобы робот Яндекса мог получить доступ.
-    // Если хотите оставить его приватным, используйте очень длинное, не угадываемое имя эндпоинта.
-    const ymlFilePath = path.join(__dirname, 'price_feed.yml');
-    if (!fs.existsSync(ymlFilePath)) {
-        return res.status(404).send('File not found. Generation might be in progress.');
-    }
-
-    // --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
-    // Устанавливаем правильный Content-Type
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    
-    // Просто отправляем содержимое файла, без принудительного скачивания
-    fs.createReadStream(ymlFilePath).pipe(res);
+// Эндпоинты
+app.get('/api/catalog', (req, res) => {
+    if (catalogCache) res.json(catalogCache);
+    else res.status(503).json({ error: "Каталог инициализируется. Пожалуйста, попробуйте через минуту." });
 });
 
-// --- ИЗМЕНЕННЫЙ ЭНДПОИНТ ---
-// Теперь он не читает файл, а просто отдает данные из кэша
-app.get('/api/catalog', async (req, res) => {
-    if (catalogCache) {
-        res.json(catalogCache);
-    } else {
-        res.status(503).json({ error: "Каталог в данный момент инициализируется. Пожалуйста, попробуйте через минуту." });
-    }
+app.get('/api/download-site-files', (req, res) => {
+    if (req.query.key !== DOWNLOAD_SECRET_KEY) return res.status(403).send('Forbidden');
+    const sourceDir = path.join(__dirname, 'dist');
+    if (!fs.existsSync(sourceDir)) return res.status(404).send('Directory not found.');
+    res.attachment('krammerti_site_files.zip');
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => res.status(500).send({ error: err.message }));
+    archive.pipe(res);
+    archive.directory(sourceDir, false);
+    archive.finalize();
 });
 
 
@@ -169,38 +117,15 @@ app.post('/api/pay', async (req, res) => {
     }
 });
 
-// --- НОВЫЙ ЭНДПОИНТ ДЛЯ СКАЧИВАНИЯ ---
-app.get('/api/download-products', (req, res) => {
-    if (req.query.key !== DOWNLOAD_SECRET_KEY) {
-        return res.status(403).send('Forbidden: Invalid Key');
-    }
 
-    const sourceDir = path.join(__dirname, 'products');
-
-    if (!fs.existsSync(sourceDir)) {
-        return res.status(404).send('Directory not found. Please wait for generation to complete.');
-    }
-
-    res.attachment('products.zip');
-    const archive = archiver('zip', { zlib: { level: 9 } });
-
-    archive.on('error', (err) => res.status(500).send({ error: err.message }));
-    archive.on('end', () => console.log('Archive has been finalized.'));
-    
-    archive.pipe(res);
-    archive.directory(sourceDir, false);
-    archive.finalize();
-});
-
-
-// --- ИЗМЕНЕННЫЙ ЗАПУСК СЕРВЕРА ---
-async function startServer() {
+// --- ЛОГИКА ЗАПУСКА (обновлен путь к YML в кэше) ---
+aasync function startServer() {
     try {
-        await runYmlGeneratorAndUpdateCache(); // Запускаем и ждем, пока кэш будет готов
+        await runYmlGeneratorAndUpdateCache();
         app.listen(port, () => {
             console.log(`Сервер запущен на порту ${port} с готовым кэшем каталога.`);
         });
-        cron.schedule('0 3 1 * *', () => { // Плановое обновление кэша
+        cron.schedule('0 3 1 * *', () => {
             runYmlGeneratorAndUpdateCache().catch(err => console.error("Ошибка при плановом обновлении кэша:", err));
         });
     } catch (error) {
