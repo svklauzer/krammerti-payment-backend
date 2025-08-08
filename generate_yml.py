@@ -16,20 +16,31 @@ PRICE_URL = "https://1c.ru/ftp/pub/pricelst/price_1c.zip"
 SHOP_NAME = "Краммерти.рф"
 COMPANY_NAME = "ООО \"Краммерти\""
 SHOP_URL = "https://краммерти.рф"
-# --- НОВЫЙ ПАРАМЕТР: Punycode версия вашего домена ---
 SHOP_URL_PUNYCODE = "https://xn--80akjflazes.xn--p1ai"
-WIDGET_PAGE_SLUG = "1c_supermarket" # Путь к странице с вашим виджетом
+WIDGET_PAGE_SLUG = "1c_supermarket"
 OUTPUT_YML_FILE = "price_feed.yml"
-OUTPUT_HTML_DIR = "products"
-
-# --- ССЫЛКА НА ИЗОБРАЖЕНИЕ, КОТОРАЯ БУДЕТ В YML ---
+OUTPUT_HTML_DIR = "products" # Папка для страниц товаров И их sitemap.xml
+OUTPUT_ROOT_DIR = "root_files" # Новая папка для файлов, которые должны лежать в корне (robots.txt, основной sitemap.xml)
 BACKEND_URL = "https://krammerti-payment-backend.onrender.com"
-PRODUCT_IMAGE_URL = f"{BACKEND_URL}/logo-1c.svg" # Правильная ссылка на ваш бэкенд
+PRODUCT_IMAGE_URL = f"{BACKEND_URL}/logo-1c.svg"
 
 # --- НОВЫЕ ПАРАМЕТРЫ ДЛЯ INDEXNOW ---
 INDEXNOW_KEY = os.environ.get('INDEXNOW_KEY') # Берем ключ из переменных окружения
 INDEXNOW_API_URL = "https://yandex.ru/indexnow"
 
+# --- СПИСОК СТАТИЧЕСКИХ СТРАНИЦ САЙТА ---
+STATIC_PAGES = [
+    "/",
+    "/1c_supermarket",
+    "/1c-bitrix_aspro",
+    "/krammerti_software_catalog",
+    "/contacts",
+    "/brand",
+    "/terms",
+    "/privacy-policy",
+    "/returns",
+    "/delivery-payment"
+]
 
 CURRENCY_MAP = {
     'РУБ.': 'RUR', 'USD': 'USD', 'У.Е.': 'USD', 'KZT': 'KZT',
@@ -155,9 +166,38 @@ def ping_indexnow(url_list):
     except Exception as e:
         print(f"Исключение при обращении к IndexNow API: {e}")
 
+# --- НОВАЯ ФУНКЦИЯ: ГЕНЕРАЦИЯ robots.txt ---
+def generate_robots_txt(output_dir):
+    print("Генерация robots.txt...")
+    content = f"""User-agent: *
+Disallow:
 
-# 2. Добавить новую функцию для генерации sitemap.xml
-def generate_sitemap(offers, base_url, output_dir):
+Host: {SHOP_URL_PUNYCODE}
+
+Sitemap: {SHOP_URL}/sitemap.xml
+Sitemap: {SHOP_URL}/{OUTPUT_HTML_DIR}/sitemap.xml
+"""
+    file_path = os.path.join(output_dir, "robots.txt")
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    print(f"Файл robots.txt успешно сгенерирован в '{file_path}'.")
+
+# --- НОВАЯ ФУНКЦИЯ: ГЕНЕРАЦИЯ ОСНОВНОГО sitemap.xml ---
+def generate_main_sitemap(static_pages, base_url, output_dir):
+    print("Генерация основного sitemap.xml...")
+    root = ET.Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
+    for page_slug in static_pages:
+        url_element = ET.SubElement(root, "url")
+        # Собираем полный URL, избегая двойных слэшей
+        full_url = f"{base_url.rstrip('/')}{page_slug}"
+        ET.SubElement(url_element, "loc").text = full_url
+    tree = ET.ElementTree(root)
+    file_path = os.path.join(output_dir, "sitemap.xml")
+    tree.write(file_path, encoding='utf-8', xml_declaration=True)
+    print(f"Основной sitemap.xml успешно сгенерирован в '{file_path}'.")
+
+# 2. Добавить новую функцию для генерации sitemap.xml для products
+def generate_sitemap_for_products(offers, base_url, output_dir):
     print("Генерация sitemap.xml...")
     root = ET.Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
     
@@ -276,24 +316,28 @@ def generate_yml_feed(categories, offers, used_currencies):
     with open(OUTPUT_YML_FILE, 'wb') as f: f.write(dom.toprettyxml(indent="  ", encoding="UTF-8"))
     print(f"YML фид успешно сохранен в файл '{OUTPUT_YML_FILE}'.")
 
-# --- ГЛАВНЫЙ ИСПОЛНЯЕМЫЙ БЛОК (С ИЗМЕНЕНИЯМИ) ---
+# --- ГЛАВНЫЙ БЛОК ---
 if __name__ == "__main__":
+    # Создаем папки для выходных файлов, если их нет
+    if not os.path.exists(OUTPUT_ROOT_DIR):
+        os.makedirs(OUTPUT_ROOT_DIR)
+
     dataframe = download_and_extract_pricelist(PRICE_URL)
     if dataframe is not None:
         categories_data, offers_data, currencies_data = parse_pricelist(dataframe)
         if categories_data and offers_data:
-            # 1. Генерируем YML
+            # Генерация файлов
             generate_yml_feed(categories_data, offers_data, currencies_data)
-            
-            # 2. Генерируем HTML-страницы
             generate_product_pages(offers_data)
             
-            # 3. Генерируем Sitemap
-            generate_sitemap(offers_data, SHOP_URL, OUTPUT_HTML_DIR)
-
-            # --- НОВЫЙ ШАГ: Отправляем все URL на быструю индексацию через IndexNow ---
+            # Генерируем два sitemap'а и robots.txt
+            generate_sitemap_for_products(offers_data, SHOP_URL, OUTPUT_HTML_DIR)
+            generate_main_sitemap(STATIC_PAGES, SHOP_URL, OUTPUT_ROOT_DIR)
+            generate_robots_txt(OUTPUT_ROOT_DIR)
+            
+            # Отправка в IndexNow
             all_urls = [offer['url'] for offer in offers_data]
-            all_urls.append(f"{SHOP_URL}/{WIDGET_PAGE_SLUG}") # Добавляем главную страницу каталога
-            ping_indexnow(all_urls) # <-- ВЫЗЫВАЕМ НОВУЮ ФУНКЦИЮ
+            all_urls.extend([f"{SHOP_URL.rstrip('/')}{page}" for page in STATIC_PAGES])
+            ping_indexnow(all_urls)
         else:
             print("Не удалось извлечь данные для создания фида и страниц.")
