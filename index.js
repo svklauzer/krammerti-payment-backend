@@ -119,7 +119,7 @@ app.post('/api/pay', async (req, res) => {
 
 
 // --- ЛОГИКА ЗАПУСКА (обновлен путь к YML в кэше) ---
-aasync function startServer() {
+async function startServer() {
     try {
         await runYmlGeneratorAndUpdateCache();
         app.listen(port, () => {
