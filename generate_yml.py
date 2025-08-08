@@ -36,7 +36,67 @@ CURRENCY_MAP = {
     'TJS': 'TJS', 'GEL': 'GEL',
 }
 
-HTML_TEMPLATE = """...""" # Шаблон без изменений
+# --- ПОЛНЫЙ И ВОССТАНОВЛЕННЫЙ ШАБЛОН HTML ---
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <meta name="description" content="{description}">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; background-color: #f4f5f7; color: #172b4d; }}
+        .container {{ max-width: 800px; margin: 40px auto; padding: 20px 40px; background-color: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }}
+        .product-header {{ border-bottom: 1px solid #dfe1e6; padding-bottom: 20px; margin-bottom: 20px; }}
+        h1 {{ font-size: 28px; margin: 0; }}
+        .product-code {{ font-size: 14px; color: #5e6c84; margin-top: 5px; }}
+        .product-body {{ display: flex; flex-wrap: wrap; gap: 30px; }}
+        .product-image {{ width: 150px; height: auto; flex-shrink: 0; object-fit: contain; }}
+        .product-info {{ flex-grow: 1; min-width: 300px; }}
+        .product-info p {{ line-height: 1.6; }}
+        .product-buy-zone {{ margin-top: 30px; padding: 20px; background-color: #fafbfc; border-radius: 6px; text-align: center; }}
+        .price {{ font-size: 24px; font-weight: bold; margin-bottom: 15px; }}
+        .buy-button {{ background-color: #e02329; color: white; border: none; border-radius: 6px; padding: 15px 30px; font-size: 18px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; }}
+    </style>
+    <script type="application/ld+json">
+    {{
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      "name": "{name_json}",
+      "image": "{picture}",
+      "description": "{description_json}",
+      "sku": "{id}",
+      "offers": {{
+        "@type": "Offer",
+        "url": "{url}",
+        "priceCurrency": "{currency}",
+        "price": "{price}",
+        "availability": "https://schema.org/InStock"
+      }}
+    }}
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header class="product-header"><h1>{name}</h1><div class="product-code">Код товара: {id}</div></header>
+        <main class="product-body">
+            <img src="{picture}" alt="{name}" class="product-image">
+            <div class="product-info"><h2>Описание</h2><p>{description_full}</p></div>
+        </main>
+        <div class="product-buy-zone">
+            <div class="price">Цена: {price} {currency}</div>
+            <a href="{buy_link}" class="buy-button">Добавить в корзину и перейти в каталог</a>
+        </div>
+    </div>
+    <script type="text/javascript">
+        (function(m,e,t,r,i,k,a){{ m[i]=m[i]||function(){{(m[i].a=m[i].a||[]).push(arguments)}}; m[i].l=1*new Date(); for (var j = 0; j < document.scripts.length; j++) {{if (document.scripts[j].src === r) {{ return; }}}} k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a) }})(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=103609697', 'ym');
+        ym(103609697, 'init', {{ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", accurateTrackBounce:true, trackLinks:true}});
+    </script>
+    <noscript><div><img src="https://mc.yandex.ru/watch/103609697" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+</body>
+</html>
+"""
 
 def generate_seo_files(offers, static_pages, base_url, base_url_punycode, output_dir):
     print("Генерация SEO-файлов (robots.txt, sitemaps)...")
