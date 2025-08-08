@@ -16,6 +16,8 @@ PRICE_URL = "https://1c.ru/ftp/pub/pricelst/price_1c.zip"
 SHOP_NAME = "Краммерти.рф"
 COMPANY_NAME = "ООО \"Краммерти\""
 SHOP_URL = "https://краммерти.рф"
+# --- НОВЫЙ ПАРАМЕТР: Punycode версия вашего домена ---
+SHOP_URL_PUNYCODE = "https://xn--80akjflazes.xn--p1ai"
 WIDGET_PAGE_SLUG = "1c_supermarket" # Путь к странице с вашим виджетом
 OUTPUT_YML_FILE = "price_feed.yml"
 OUTPUT_HTML_DIR = "products"
@@ -120,21 +122,20 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- НОВАЯ, УПРОЩЕННАЯ ФУНКЦИЯ ДЛЯ ОТПРАВКИ URL ЧЕРЕЗ INDEXNOW ---
+# --- ИСПРАВЛЕННАЯ ФУНКЦИЯ INDEXNOW ---
 def ping_indexnow(url_list):
     if not INDEXNOW_KEY:
-        print("Ключ INDEXNOW_KEY не найден в переменных окружения. Пропускаем отправку.")
+        print("Ключ INDEXNOW_KEY не найден. Пропускаем отправку.")
         return
 
     print(f"Отправка {len(url_list)} URL в Яндекс через IndexNow...")
-    
     headers = {'Content-Type': 'application/json; charset=utf-8'}
     
-    # Извлекаем хост из URL магазина (например, "краммерти.рф")
-    host = SHOP_URL.replace("https://", "").replace("http://", "").split('/')[0]
+    # Используем Punycode для хоста
+    host = SHOP_URL_PUNYCODE.replace("https://", "").replace("http://", "").split('/')[0]
     
-    # Формируем ключ-файл, как он должен лежать на хостинге
-    key_location = f"{SHOP_URL}/{INDEXNOW_KEY}.txt"
+    # ИСПОЛЬЗУЕМ Punycode для keyLocation
+    key_location = f"{SHOP_URL_PUNYCODE}/{INDEXNOW_KEY}.txt"
 
     payload = {
         "host": host,
@@ -146,10 +147,8 @@ def ping_indexnow(url_list):
     try:
         response = requests.post(INDEXNOW_API_URL, headers=headers, data=json.dumps(payload), timeout=30)
         
-        if response.status_code == 200:
-            print("Успешный ответ от IndexNow: URL отправлены.")
-        elif response.status_code == 202:
-            print("Ответ от IndexNow (202 Accepted): URL приняты в очередь.")
+        if response.status_code in [200, 202]:
+            print(f"Успешный ответ от IndexNow ({response.status_code}): URL отправлены в очередь.")
         else:
             print(f"Ошибка при отправке URL в IndexNow. Статус: {response.status_code}, Ответ: {response.text}")
     
