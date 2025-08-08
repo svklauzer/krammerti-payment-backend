@@ -24,10 +24,10 @@ OUTPUT_HTML_DIR = "products"
 BACKEND_URL = "https://krammerti-payment-backend.onrender.com"
 PRODUCT_IMAGE_URL = f"{BACKEND_URL}/logo-1c.svg" # Правильная ссылка на ваш бэкенд
 
-# --- НОВЫЕ ПАРАМЕТРЫ ДЛЯ INDEXING API ---
-YANDEX_API_KEY = os.environ.get('YANDEX_API_KEY')
-YANDEX_HOST_ID = os.environ.get('YANDEX_HOST_ID') # <-- Новая переменная
-YANDEX_HOST = "https://api.webmaster.yandex.net"
+# --- НОВЫЕ ПАРАМЕТРЫ ДЛЯ INDEXNOW ---
+INDEXNOW_KEY = os.environ.get('INDEXNOW_KEY') # Берем ключ из переменных окружения
+INDEXNOW_API_URL = "https://yandex.ru/indexnow"
+
 
 CURRENCY_MAP = {
     'РУБ.': 'RUR', 'USD': 'USD', 'У.Е.': 'USD', 'KZT': 'KZT',
@@ -120,33 +120,41 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- ИСПРАВЛЕННАЯ ФУНКЦИЯ ДЛЯ ОТПРАВКИ URL В ЯНДЕКС ---
-def ping_yandex_for_indexing(url_list):
-    if not YANDEX_API_KEY:
-        print("Ключ YANDEX_API_KEY не найден. Пропускаем отправку.")
-        return
-    if not YANDEX_HOST_ID:
-        print("YANDEX_HOST_ID не найден. Пропускаем отправку.")
+# --- НОВАЯ, УПРОЩЕННАЯ ФУНКЦИЯ ДЛЯ ОТПРАВКИ URL ЧЕРЕЗ INDEXNOW ---
+def ping_indexnow(url_list):
+    if not INDEXNOW_KEY:
+        print("Ключ INDEXNOW_KEY не найден в переменных окружения. Пропускаем отправку.")
         return
 
-    print(f"Отправка {len(url_list)} URL в Яндекс Indexing API для хоста {YANDEX_HOST_ID}...")
+    print(f"Отправка {len(url_list)} URL в Яндекс через IndexNow...")
     
-    # --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: МЕНЯЕМ 'OAuth' НА 'Bearer' ---
-    headers = {'Authorization': f'Bearer {YANDEX_API_KEY}', 'Content-Type': 'application/json'}
+    headers = {'Content-Type': 'application/json; charset=utf-8'}
     
-    api_url = f"{YANDEX_HOST}/v4/user/hosts/{YANDEX_HOST_ID}/search-urls/batch"
+    # Извлекаем хост из URL магазина (например, "краммерти.рф")
+    host = SHOP_URL.replace("https://", "").replace("http://", "").split('/')[0]
+    
+    # Формируем ключ-файл, как он должен лежать на хостинге
+    key_location = f"{SHOP_URL}/{INDEXNOW_KEY}.txt"
 
-    for i in range(0, len(url_list), 100):
-        chunk = url_list[i:i+100]
-        payload = {"url_list": chunk}
-        try:
-            response = requests.post(api_url, headers=headers, data=json.dumps(payload), timeout=30)
-            if response.status_code == 202:
-                print(f"Партия из {len(chunk)} URL успешно отправлена в очередь на индексацию.")
-            else:
-                print(f"Ошибка при отправке URL в Яндекс. Статус: {response.status_code}, Ответ: {response.text}")
-        except Exception as e:
-            print(f"Исключение при обращении к Яндекс API: {e}")
+    payload = {
+        "host": host,
+        "key": INDEXNOW_KEY,
+        "keyLocation": key_location,
+        "urlList": url_list
+    }
+
+    try:
+        response = requests.post(INDEXNOW_API_URL, headers=headers, data=json.dumps(payload), timeout=30)
+        
+        if response.status_code == 200:
+            print("Успешный ответ от IndexNow: URL отправлены.")
+        elif response.status_code == 202:
+            print("Ответ от IndexNow (202 Accepted): URL приняты в очередь.")
+        else:
+            print(f"Ошибка при отправке URL в IndexNow. Статус: {response.status_code}, Ответ: {response.text}")
+    
+    except Exception as e:
+        print(f"Исключение при обращении к IndexNow API: {e}")
 
 
 # 2. Добавить новую функцию для генерации sitemap.xml
@@ -284,9 +292,9 @@ if __name__ == "__main__":
             # 3. Генерируем Sitemap
             generate_sitemap(offers_data, SHOP_URL, OUTPUT_HTML_DIR)
 
-            # 4. НОВЫЙ ШАГ: Отправляем все URL на быструю индексацию в Яндекс
+            # --- НОВЫЙ ШАГ: Отправляем все URL на быструю индексацию через IndexNow ---
             all_urls = [offer['url'] for offer in offers_data]
-            all_urls.append(f"{SHOP_URL}/{WIDGET_PAGE_SLUG}") # Добавляем и главную страницу каталога
-            ping_yandex_for_indexing(all_urls)
+            all_urls.append(f"{SHOP_URL}/{WIDGET_PAGE_SLUG}") # Добавляем главную страницу каталога
+            ping_indexnow(all_urls) # <-- ВЫЗЫВАЕМ НОВУЮ ФУНКЦИЮ
         else:
             print("Не удалось извлечь данные для создания фида и страниц.")
